@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, DatePicker, Table, Tag } from 'antd';
+import { Card, Row, Col, Statistic, DatePicker, Table, Tag, Button, Modal, InputNumber, Input, message, Popconfirm } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import ReactECharts from 'echarts-for-react';
-import { adminApi } from '../api';
+import { adminApi, officeApi } from '../api';
 
 const { MonthPicker } = DatePicker;
 
@@ -12,10 +13,66 @@ export default function AdminDashboard() {
   const [trend, setTrend] = useState([]);
   const [distribution, setDistribution] = useState({ byDept: [], byType: [] });
   const [loading, setLoading] = useState(false);
+  const [offices, setOffices] = useState([]);
+  const [officeModalOpen, setOfficeModalOpen] = useState(false);
+  const [editingOffice, setEditingOffice] = useState(null);
+  const [officeForm, setOfficeForm] = useState({ name: '', lat: 39.9042, lng: 116.4074, radius: 200 });
 
   useEffect(() => {
     loadData();
+    loadOffices();
   }, [month]);
+
+  const loadOffices = async () => {
+    try {
+      const data = await officeApi.list();
+      setOffices(data);
+    } catch (e) {
+      message.error('获取办公地点失败');
+    }
+  };
+
+  const handleAddOffice = () => {
+    setEditingOffice(null);
+    setOfficeForm({ name: '', lat: 39.9042, lng: 116.4074, radius: 200 });
+    setOfficeModalOpen(true);
+  };
+
+  const handleEditOffice = (office) => {
+    setEditingOffice(office);
+    setOfficeForm({ name: office.name, lat: office.lat, lng: office.lng, radius: office.radius });
+    setOfficeModalOpen(true);
+  };
+
+  const handleSaveOffice = async () => {
+    if (!officeForm.name) {
+      message.warning('请输入办公点名称');
+      return;
+    }
+    try {
+      if (editingOffice) {
+        await officeApi.update(editingOffice.id, officeForm);
+        message.success('办公点已更新');
+      } else {
+        await officeApi.create(officeForm);
+        message.success('办公点已添加');
+      }
+      setOfficeModalOpen(false);
+      loadOffices();
+    } catch (e) {
+      message.error(e.error || '操作失败');
+    }
+  };
+
+  const handleDeleteOffice = async (id) => {
+    try {
+      await officeApi.remove(id);
+      message.success('办公点已删除');
+      loadOffices();
+    } catch (e) {
+      message.error(e.error || '删除失败');
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -230,6 +287,85 @@ export default function AdminDashboard() {
           </Card>
         </Col>
       </Row>
+
+      <Card
+        title="办公地点与围栏配置"
+        style={{ marginTop: 24 }}
+        extra={<Button type="primary" icon={<PlusOutlined />} onClick={handleAddOffice}>添加办公点</Button>}
+      >
+        <Table
+          rowKey="id"
+          dataSource={offices}
+          pagination={false}
+          columns={[
+            { title: '名称', dataIndex: 'name', key: 'name' },
+            { title: '纬度', dataIndex: 'lat', key: 'lat', render: (v) => v?.toFixed(6) },
+            { title: '经度', dataIndex: 'lng', key: 'lng', render: (v) => v?.toFixed(6) },
+            { title: '围栏半径(米)', dataIndex: 'radius', key: 'radius', render: (v) => <Tag color="blue">{v}米</Tag> },
+            {
+              title: '操作',
+              key: 'action',
+              render: (_, record) => (
+                <span>
+                  <Button type="link" icon={<EditOutlined />} onClick={() => handleEditOffice(record)}>编辑</Button>
+                  <Popconfirm title="确定删除该办公点？" onConfirm={() => handleDeleteOffice(record.id)}>
+                    <Button type="link" danger icon={<DeleteOutlined />}>删除</Button>
+                  </Popconfirm>
+                </span>
+              )
+            }
+          ]}
+        />
+      </Card>
+
+      <Modal
+        title={editingOffice ? '编辑办公点' : '添加办公点'}
+        open={officeModalOpen}
+        onOk={handleSaveOffice}
+        onCancel={() => setOfficeModalOpen(false)}
+        okText="保存"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <div style={{ marginBottom: 4 }}>办公点名称</div>
+            <Input
+              value={officeForm.name}
+              onChange={(e) => setOfficeForm({ ...officeForm, name: e.target.value })}
+              placeholder="如：公司总部"
+            />
+          </div>
+          <div>
+            <div style={{ marginBottom: 4 }}>纬度 (Latitude)</div>
+            <InputNumber
+              style={{ width: '100%' }}
+              value={officeForm.lat}
+              onChange={(v) => setOfficeForm({ ...officeForm, lat: v })}
+              step={0.0001}
+              precision={6}
+            />
+          </div>
+          <div>
+            <div style={{ marginBottom: 4 }}>经度 (Longitude)</div>
+            <InputNumber
+              style={{ width: '100%' }}
+              value={officeForm.lng}
+              onChange={(v) => setOfficeForm({ ...officeForm, lng: v })}
+              step={0.0001}
+              precision={6}
+            />
+          </div>
+          <div>
+            <div style={{ marginBottom: 4 }}>围栏半径 (米)</div>
+            <InputNumber
+              style={{ width: '100%' }}
+              value={officeForm.radius}
+              onChange={(v) => setOfficeForm({ ...officeForm, radius: v })}
+              min={10}
+              step={50}
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

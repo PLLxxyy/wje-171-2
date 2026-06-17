@@ -28,6 +28,15 @@ function initDB() {
       FOREIGN KEY (manager_id) REFERENCES users(id)
     );
 
+    CREATE TABLE IF NOT EXISTS offices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      lat REAL NOT NULL,
+      lng REAL NOT NULL,
+      radius INTEGER NOT NULL DEFAULT 200,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE TABLE IF NOT EXISTS attendance (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL,
@@ -42,8 +51,15 @@ function initDB() {
       check_out_lng REAL,
       status TEXT DEFAULT 'normal' CHECK(status IN ('normal', 'late', 'early_leave', 'absent', 'half_absent')),
       is_field_work INTEGER DEFAULT 0,
+      check_in_location_source TEXT DEFAULT 'gps' CHECK(check_in_location_source IN ('gps', 'office')),
+      check_in_office_id INTEGER,
+      check_out_location_source TEXT DEFAULT 'gps' CHECK(check_out_location_source IN ('gps', 'office')),
+      check_out_office_id INTEGER,
+      is_abnormal INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (check_in_office_id) REFERENCES offices(id),
+      FOREIGN KEY (check_out_office_id) REFERENCES offices(id),
       UNIQUE(user_id, date)
     );
 
@@ -97,6 +113,14 @@ function initDB() {
     db.prepare('INSERT OR IGNORE INTO departments (name, manager_id) VALUES (?, ?)').run('销售部', sup1Id);
     db.prepare('INSERT OR IGNORE INTO departments (name, manager_id) VALUES (?, ?)').run('技术部', sup2Id);
     db.prepare('INSERT OR IGNORE INTO departments (name, manager_id) VALUES (?, ?)').run('行政部', adminId);
+
+    const officeCount = db.prepare('SELECT COUNT(*) as count FROM offices').get().count;
+    if (officeCount === 0) {
+      const insertOffice = db.prepare('INSERT INTO offices (name, lat, lng, radius) VALUES (?, ?, ?, ?)');
+      insertOffice.run('公司总部', 39.9042, 116.4074, 200);
+      insertOffice.run('北京分公司', 39.9142, 116.3974, 300);
+      insertOffice.run('上海分公司', 31.2304, 121.4737, 250);
+    }
 
     console.log('数据库初始化完成，已插入示例数据');
     console.log('管理员账号: admin / admin123');

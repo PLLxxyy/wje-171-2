@@ -95,11 +95,16 @@ export default function SupervisorDashboard() {
                     {member.department || '-'}
                   </div>
                   <Tag color={st.color} style={{ margin: 0 }}>{st.text}</Tag>
+                  {member.attendance?.is_abnormal && <Tag color="red" style={{ margin: 0, marginLeft: 4 }}>定位异常</Tag>}
                 </div>
                 {member.attendance && (
                   <div style={{ marginTop: 12, fontSize: 12, color: '#666', lineHeight: 1.8 }}>
-                    <div>上班：{member.attendance.check_in_time ? dayjs(member.attendance.check_in_time).format('HH:mm') : '-'}</div>
-                    <div>下班：{member.attendance.check_out_time ? dayjs(member.attendance.check_out_time).format('HH:mm') : '-'}</div>
+                    <div>上班：{member.attendance.check_in_time ? dayjs(member.attendance.check_in_time).format('HH:mm') : '-'}
+                      {member.attendance.check_in_location_source === 'office' && <Tag color="blue" style={{ marginLeft: 4, fontSize: 10 }}>手动选点</Tag>}
+                    </div>
+                    <div>下班：{member.attendance.check_out_time ? dayjs(member.attendance.check_out_time).format('HH:mm') : '-'}
+                      {member.attendance.check_out_location_source === 'office' && <Tag color="blue" style={{ marginLeft: 4, fontSize: 10 }}>手动选点</Tag>}
+                    </div>
                   </div>
                 )}
               </div>

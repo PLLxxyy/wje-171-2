@@ -64,9 +64,10 @@ export default function MyAttendance() {
       title: '状态',
       dataIndex: 'status',
       key: 'status',
-      render: (v) => (
+      render: (v, r) => (
         <span>
           {statusMap[v] && <Tag color={statusMap[v].color}>{statusMap[v].text}</Tag>}
+          {r.is_abnormal && <Tag color="red">定位异常</Tag>}
         </span>
       )
     },

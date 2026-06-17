@@ -60,4 +60,11 @@ export const adminApi = {
   departments: () => api.get('/admin/departments')
 };
 
+export const officeApi = {
+  list: () => api.get('/offices'),
+  create: (data) => api.post('/offices', data),
+  update: (id, data) => api.put(`/offices/${id}`, data),
+  remove: (id) => api.delete(`/offices/${id}`)
+};
+
 export default api;

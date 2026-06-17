@@ -87,8 +87,26 @@ function calcAttendanceStatus(checkIn, checkOut) {
   return status;
 }
 
+function haversineDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const toRad = (deg) => deg * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function isWithinAnyOffice(lat, lng) {
+  const offices = db.prepare('SELECT * FROM offices').all();
+  for (const office of offices) {
+    const dist = haversineDistance(lat, lng, office.lat, office.lng);
+    if (dist <= office.radius) return true;
+  }
+  return false;
+}
+
 app.post('/api/attendance/check-in', authMiddleware, (req, res) => {
-  const { location, lat, lng } = req.body;
+  const { location, lat, lng, location_source, office_id } = req.body;
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
   const timeStr = now.toISOString();
@@ -98,18 +116,41 @@ app.post('/api/attendance/check-in', authMiddleware, (req, res) => {
     return res.status(400).json({ error: '今日已打卡上班' });
   }
 
+  let finalLat = lat;
+  let finalLng = lng;
+  let finalLocation = location;
+  let finalSource = location_source || 'gps';
+  let finalOfficeId = office_id || null;
+  let isAbnormal = 0;
+
+  if (finalSource === 'office' && office_id) {
+    const office = db.prepare('SELECT * FROM offices WHERE id = ?').get(office_id);
+    if (office) {
+      finalLat = office.lat;
+      finalLng = office.lng;
+      finalLocation = office.name + '（手动选择）';
+      finalOfficeId = office.id;
+    }
+  } else {
+    if (finalLat && finalLng && !isWithinAnyOffice(finalLat, finalLng)) {
+      isAbnormal = 1;
+    }
+  }
+
   const status = calcAttendanceStatus(timeStr, record?.check_out_time);
 
   if (record) {
     db.prepare(`
-      UPDATE attendance SET check_in_time = ?, check_in_location = ?, check_in_lat = ?, check_in_lng = ?, status = ?
+      UPDATE attendance SET check_in_time = ?, check_in_location = ?, check_in_lat = ?, check_in_lng = ?,
+        check_in_location_source = ?, check_in_office_id = ?, is_abnormal = ?, status = ?
       WHERE id = ?
-    `).run(timeStr, location, lat, lng, status, record.id);
+    `).run(timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, status, record.id);
   } else {
     const info = db.prepare(`
-      INSERT INTO attendance (user_id, date, check_in_time, check_in_location, check_in_lat, check_in_lng, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(req.user.id, dateStr, timeStr, location, lat, lng, status);
+      INSERT INTO attendance (user_id, date, check_in_time, check_in_location, check_in_lat, check_in_lng,
+        check_in_location_source, check_in_office_id, is_abnormal, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(req.user.id, dateStr, timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, status);
     record = db.prepare('SELECT * FROM attendance WHERE id = ?').get(info.lastInsertRowid);
   }
 
@@ -117,7 +158,7 @@ app.post('/api/attendance/check-in', authMiddleware, (req, res) => {
 });
 
 app.post('/api/attendance/check-out', authMiddleware, (req, res) => {
-  const { location, lat, lng } = req.body;
+  const { location, lat, lng, location_source, office_id } = req.body;
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
   const timeStr = now.toISOString();
@@ -130,11 +171,33 @@ app.post('/api/attendance/check-out', authMiddleware, (req, res) => {
     return res.status(400).json({ error: '今日已打卡下班' });
   }
 
+  let finalLat = lat;
+  let finalLng = lng;
+  let finalLocation = location;
+  let finalSource = location_source || 'gps';
+  let finalOfficeId = office_id || null;
+  let isAbnormal = record.is_abnormal || 0;
+
+  if (finalSource === 'office' && office_id) {
+    const office = db.prepare('SELECT * FROM offices WHERE id = ?').get(office_id);
+    if (office) {
+      finalLat = office.lat;
+      finalLng = office.lng;
+      finalLocation = office.name + '（手动选择）';
+      finalOfficeId = office.id;
+    }
+  } else {
+    if (finalLat && finalLng && !isWithinAnyOffice(finalLat, finalLng)) {
+      isAbnormal = 1;
+    }
+  }
+
   const status = calcAttendanceStatus(record.check_in_time, timeStr);
   db.prepare(`
-    UPDATE attendance SET check_out_time = ?, check_out_location = ?, check_out_lat = ?, check_out_lng = ?, status = ?
+    UPDATE attendance SET check_out_time = ?, check_out_location = ?, check_out_lat = ?, check_out_lng = ?,
+      check_out_location_source = ?, check_out_office_id = ?, is_abnormal = ?, status = ?
     WHERE id = ?
-  `).run(timeStr, location, lat, lng, status, record.id);
+  `).run(timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, status, record.id);
 
   record = db.prepare('SELECT * FROM attendance WHERE id = ?').get(record.id);
   res.json(record);
@@ -161,6 +224,33 @@ app.get('/api/attendance/my', authMiddleware, (req, res) => {
     `).all(req.user.id);
   }
   res.json(records);
+});
+
+app.get('/api/offices', authMiddleware, (req, res) => {
+  const offices = db.prepare('SELECT * FROM offices ORDER BY id').all();
+  res.json(offices);
+});
+
+app.post('/api/offices', authMiddleware, requireRole('admin'), (req, res) => {
+  const { name, lat, lng, radius } = req.body;
+  if (!name || lat == null || lng == null) {
+    return res.status(400).json({ error: '办公点名称和坐标不能为空' });
+  }
+  const info = db.prepare('INSERT INTO offices (name, lat, lng, radius) VALUES (?, ?, ?, ?)').run(name, lat, lng, radius || 200);
+  const office = db.prepare('SELECT * FROM offices WHERE id = ?').get(info.lastInsertRowid);
+  res.json(office);
+});
+
+app.put('/api/offices/:id', authMiddleware, requireRole('admin'), (req, res) => {
+  const { name, lat, lng, radius } = req.body;
+  db.prepare('UPDATE offices SET name = ?, lat = ?, lng = ?, radius = ? WHERE id = ?').run(name, lat, lng, radius, req.params.id);
+  const office = db.prepare('SELECT * FROM offices WHERE id = ?').get(req.params.id);
+  res.json(office);
+});
+
+app.delete('/api/offices/:id', authMiddleware, requireRole('admin'), (req, res) => {
+  db.prepare('DELETE FROM offices WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
 });
 
 app.post('/api/field-work', authMiddleware, (req, res) => {
