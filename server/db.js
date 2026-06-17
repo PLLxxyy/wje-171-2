@@ -135,23 +135,84 @@ function initDB() {
 initDB();
 
 function migrateDB() {
+  const existingTables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(t => t.name);
   const tableInfo = db.prepare("PRAGMA table_info(attendance)").all();
   const columnNames = tableInfo.map(col => col.name);
+  const migrationLogs = [];
+
+  if (!existingTables.includes('offices')) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS offices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        lat REAL NOT NULL,
+        lng REAL NOT NULL,
+        radius INTEGER NOT NULL DEFAULT 200,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    migrationLogs.push('创建 offices 表');
+
+    const insertOffice = db.prepare('INSERT INTO offices (name, lat, lng, radius) VALUES (?, ?, ?, ?)');
+    insertOffice.run('公司总部', 39.9042, 116.4074, 200);
+    insertOffice.run('北京分公司', 39.9142, 116.3974, 300);
+    insertOffice.run('上海分公司', 31.2304, 121.4737, 250);
+    migrationLogs.push('插入 3 条默认办公地点数据');
+  } else {
+    const officeCount = db.prepare('SELECT COUNT(*) as count FROM offices').get().count;
+    if (officeCount === 0) {
+      const insertOffice = db.prepare('INSERT INTO offices (name, lat, lng, radius) VALUES (?, ?, ?, ?)');
+      insertOffice.run('公司总部', 39.9042, 116.4074, 200);
+      insertOffice.run('北京分公司', 39.9142, 116.3974, 300);
+      insertOffice.run('上海分公司', 31.2304, 121.4737, 250);
+      migrationLogs.push('offices 表为空，插入 3 条默认办公地点');
+    }
+  }
+
+  if (!columnNames.includes('check_in_location_source')) {
+    db.exec(`ALTER TABLE attendance ADD COLUMN check_in_location_source TEXT DEFAULT 'gps' CHECK(check_in_location_source IN ('gps', 'office'))`);
+    migrationLogs.push('添加 attendance.check_in_location_source');
+  }
+  if (!columnNames.includes('check_in_office_id')) {
+    db.exec('ALTER TABLE attendance ADD COLUMN check_in_office_id INTEGER');
+    migrationLogs.push('添加 attendance.check_in_office_id');
+  }
+  if (!columnNames.includes('check_out_location_source')) {
+    db.exec(`ALTER TABLE attendance ADD COLUMN check_out_location_source TEXT DEFAULT 'gps' CHECK(check_out_location_source IN ('gps', 'office'))`);
+    migrationLogs.push('添加 attendance.check_out_location_source');
+  }
+  if (!columnNames.includes('check_out_office_id')) {
+    db.exec('ALTER TABLE attendance ADD COLUMN check_out_office_id INTEGER');
+    migrationLogs.push('添加 attendance.check_out_office_id');
+  }
+  if (!columnNames.includes('is_abnormal')) {
+    db.exec('ALTER TABLE attendance ADD COLUMN is_abnormal INTEGER DEFAULT 0');
+    migrationLogs.push('添加 attendance.is_abnormal');
+  }
 
   if (!columnNames.includes('abnormal_review_status')) {
     db.exec(`ALTER TABLE attendance ADD COLUMN abnormal_review_status TEXT CHECK(abnormal_review_status IS NULL OR abnormal_review_status IN ('pending', 'approved', 'rejected'))`);
+    migrationLogs.push('添加 attendance.abnormal_review_status');
   }
   if (!columnNames.includes('abnormal_reviewed_by')) {
     db.exec('ALTER TABLE attendance ADD COLUMN abnormal_reviewed_by INTEGER');
+    migrationLogs.push('添加 attendance.abnormal_reviewed_by');
   }
   if (!columnNames.includes('abnormal_reviewed_at')) {
     db.exec('ALTER TABLE attendance ADD COLUMN abnormal_reviewed_at DATETIME');
+    migrationLogs.push('添加 attendance.abnormal_reviewed_at');
   }
 
   const existingAbnormal = db.prepare("SELECT COUNT(*) as count FROM attendance WHERE is_abnormal = 1 AND abnormal_review_status IS NULL").get().count;
   if (existingAbnormal > 0) {
     db.prepare("UPDATE attendance SET abnormal_review_status = 'pending' WHERE is_abnormal = 1 AND abnormal_review_status IS NULL").run();
-    console.log(`已迁移 ${existingAbnormal} 条异常打卡记录为待审核状态`);
+    migrationLogs.push(`迁移 ${existingAbnormal} 条异常打卡记录为待审核状态`);
+  }
+
+  if (migrationLogs.length > 0) {
+    console.log('\n===== 数据库迁移完成 =====');
+    migrationLogs.forEach(log => console.log(`  ✓ ${log}`));
+    console.log('==========================\n');
   }
 }
 
