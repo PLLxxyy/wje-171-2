@@ -56,6 +56,9 @@ function initDB() {
       check_out_location_source TEXT DEFAULT 'gps' CHECK(check_out_location_source IN ('gps', 'office')),
       check_out_office_id INTEGER,
       is_abnormal INTEGER DEFAULT 0,
+      abnormal_review_status TEXT CHECK(abnormal_review_status IS NULL OR abnormal_review_status IN ('pending', 'approved', 'rejected')),
+      abnormal_reviewed_by INTEGER,
+      abnormal_reviewed_at DATETIME,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (user_id) REFERENCES users(id),
       FOREIGN KEY (check_in_office_id) REFERENCES offices(id),
@@ -130,5 +133,28 @@ function initDB() {
 }
 
 initDB();
+
+function migrateDB() {
+  const tableInfo = db.prepare("PRAGMA table_info(attendance)").all();
+  const columnNames = tableInfo.map(col => col.name);
+
+  if (!columnNames.includes('abnormal_review_status')) {
+    db.exec(`ALTER TABLE attendance ADD COLUMN abnormal_review_status TEXT CHECK(abnormal_review_status IS NULL OR abnormal_review_status IN ('pending', 'approved', 'rejected'))`);
+  }
+  if (!columnNames.includes('abnormal_reviewed_by')) {
+    db.exec('ALTER TABLE attendance ADD COLUMN abnormal_reviewed_by INTEGER');
+  }
+  if (!columnNames.includes('abnormal_reviewed_at')) {
+    db.exec('ALTER TABLE attendance ADD COLUMN abnormal_reviewed_at DATETIME');
+  }
+
+  const existingAbnormal = db.prepare("SELECT COUNT(*) as count FROM attendance WHERE is_abnormal = 1 AND abnormal_review_status IS NULL").get().count;
+  if (existingAbnormal > 0) {
+    db.prepare("UPDATE attendance SET abnormal_review_status = 'pending' WHERE is_abnormal = 1 AND abnormal_review_status IS NULL").run();
+    console.log(`已迁移 ${existingAbnormal} 条异常打卡记录为待审核状态`);
+  }
+}
+
+migrateDB();
 
 module.exports = db;

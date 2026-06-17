@@ -67,4 +67,9 @@ export const officeApi = {
   remove: (id) => api.delete(`/offices/${id}`)
 };
 
+export const abnormalAttendanceApi = {
+  list: (params) => api.get('/abnormal-attendance', { params }),
+  review: (id, status) => api.put(`/abnormal-attendance/${id}/review`, { status })
+};
+
 export default api;

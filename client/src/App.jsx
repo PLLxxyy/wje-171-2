@@ -10,6 +10,7 @@ import MyAttendance from './pages/MyAttendance.jsx';
 import SupervisorDashboard from './pages/SupervisorDashboard.jsx';
 import TeamAttendance from './pages/TeamAttendance.jsx';
 import TeamFieldWork from './pages/TeamFieldWork.jsx';
+import AbnormalReview from './pages/AbnormalReview.jsx';
 import AdminDashboard from './pages/AdminDashboard.jsx';
 import AdminReports from './pages/AdminReports.jsx';
 
@@ -82,6 +83,7 @@ export default function App() {
           <Route path="dashboard" element={<SupervisorDashboard />} />
           <Route path="attendance" element={<TeamAttendance />} />
           <Route path="field-work" element={<TeamFieldWork />} />
+          <Route path="abnormal-review" element={<AbnormalReview />} />
         </Route>
 
         <Route path="/admin" element={
@@ -91,6 +93,7 @@ export default function App() {
         }>
           <Route path="dashboard" element={<AdminDashboard />} />
           <Route path="reports" element={<AdminReports />} />
+          <Route path="abnormal-review" element={<AbnormalReview />} />
         </Route>
       </Routes>
     </div>

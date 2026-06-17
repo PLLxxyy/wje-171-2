@@ -138,19 +138,20 @@ app.post('/api/attendance/check-in', authMiddleware, (req, res) => {
   }
 
   const status = calcAttendanceStatus(timeStr, record?.check_out_time);
+  const abnormalReviewStatus = isAbnormal ? 'pending' : (record?.abnormal_review_status || null);
 
   if (record) {
     db.prepare(`
       UPDATE attendance SET check_in_time = ?, check_in_location = ?, check_in_lat = ?, check_in_lng = ?,
-        check_in_location_source = ?, check_in_office_id = ?, is_abnormal = ?, status = ?
+        check_in_location_source = ?, check_in_office_id = ?, is_abnormal = ?, abnormal_review_status = ?, status = ?
       WHERE id = ?
-    `).run(timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, status, record.id);
+    `).run(timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, abnormalReviewStatus, status, record.id);
   } else {
     const info = db.prepare(`
       INSERT INTO attendance (user_id, date, check_in_time, check_in_location, check_in_lat, check_in_lng,
-        check_in_location_source, check_in_office_id, is_abnormal, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(req.user.id, dateStr, timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, status);
+        check_in_location_source, check_in_office_id, is_abnormal, abnormal_review_status, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(req.user.id, dateStr, timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, abnormalReviewStatus, status);
     record = db.prepare('SELECT * FROM attendance WHERE id = ?').get(info.lastInsertRowid);
   }
 
@@ -193,11 +194,12 @@ app.post('/api/attendance/check-out', authMiddleware, (req, res) => {
   }
 
   const status = calcAttendanceStatus(record.check_in_time, timeStr);
+  const abnormalReviewStatus = isAbnormal ? 'pending' : (record.abnormal_review_status || null);
   db.prepare(`
     UPDATE attendance SET check_out_time = ?, check_out_location = ?, check_out_lat = ?, check_out_lng = ?,
-      check_out_location_source = ?, check_out_office_id = ?, is_abnormal = ?, status = ?
+      check_out_location_source = ?, check_out_office_id = ?, is_abnormal = ?, abnormal_review_status = ?, status = ?
     WHERE id = ?
-  `).run(timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, status, record.id);
+  `).run(timeStr, finalLocation, finalLat, finalLng, finalSource, finalOfficeId, isAbnormal, abnormalReviewStatus, status, record.id);
 
   record = db.prepare('SELECT * FROM attendance WHERE id = ?').get(record.id);
   res.json(record);
@@ -251,6 +253,48 @@ app.put('/api/offices/:id', authMiddleware, requireRole('admin'), (req, res) => 
 app.delete('/api/offices/:id', authMiddleware, requireRole('admin'), (req, res) => {
   db.prepare('DELETE FROM offices WHERE id = ?').run(req.params.id);
   res.json({ success: true });
+});
+
+app.get('/api/abnormal-attendance', authMiddleware, requireRole('supervisor', 'admin'), (req, res) => {
+  const { status } = req.query;
+  let sql = `
+    SELECT a.*, u.name as user_name, u.username, u.department,
+      reviewer.name as reviewer_name
+    FROM attendance a
+    LEFT JOIN users u ON a.user_id = u.id
+    LEFT JOIN users reviewer ON a.abnormal_reviewed_by = reviewer.id
+    WHERE a.is_abnormal = 1
+  `;
+  const params = [];
+
+  if (req.user.role === 'supervisor') {
+    sql += ' AND u.supervisor_id = ?';
+    params.push(req.user.id);
+  }
+
+  if (status && ['pending', 'approved', 'rejected'].includes(status)) {
+    sql += ' AND a.abnormal_review_status = ?';
+    params.push(status);
+  }
+
+  sql += ' ORDER BY a.date DESC LIMIT 200';
+  const records = db.prepare(sql).all(...params);
+  res.json(records);
+});
+
+app.put('/api/abnormal-attendance/:id/review', authMiddleware, requireRole('supervisor', 'admin'), (req, res) => {
+  const { status } = req.body;
+  if (!['approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: '审核状态无效，仅支持 approved 或 rejected' });
+  }
+  const id = req.params.id;
+  const now = new Date().toISOString();
+  db.prepare(`
+    UPDATE attendance SET abnormal_review_status = ?, abnormal_reviewed_by = ?, abnormal_reviewed_at = ?
+    WHERE id = ? AND is_abnormal = 1
+  `).run(status, req.user.id, now, id);
+  const record = db.prepare('SELECT * FROM attendance WHERE id = ?').get(id);
+  res.json(record);
 });
 
 app.post('/api/field-work', authMiddleware, (req, res) => {

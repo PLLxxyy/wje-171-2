@@ -8,7 +8,8 @@ import {
   TeamOutlined,
   BarChartOutlined,
   FileTextOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
 import { useAuth } from '../context/AuthContext.jsx';
 
@@ -61,6 +62,12 @@ export default function Layout() {
         label: '外勤审批',
         onClick: () => navigate('/supervisor/field-work')
       });
+      items.push({
+        key: '/supervisor/abnormal-review',
+        icon: <WarningOutlined />,
+        label: '异常打卡审核',
+        onClick: () => navigate('/supervisor/abnormal-review')
+      });
     }
     if (user.role === 'admin') {
       items.push({ type: 'divider' });
@@ -75,6 +82,12 @@ export default function Layout() {
         icon: <FileTextOutlined />,
         label: '报表导出',
         onClick: () => navigate('/admin/reports')
+      });
+      items.push({
+        key: '/admin/abnormal-review',
+        icon: <WarningOutlined />,
+        label: '异常打卡审核',
+        onClick: () => navigate('/admin/abnormal-review')
       });
     }
     return items;

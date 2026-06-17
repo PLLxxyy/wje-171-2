@@ -241,7 +241,9 @@ export default function EmployeeDashboard() {
                   </Tag>
                 ) : '-'}
                 {todayRecord.is_field_work && <Tag color="orange">外勤</Tag>}
-                {todayRecord.is_abnormal && <Tag color="red">定位异常待审</Tag>}
+                {todayRecord.is_abnormal && todayRecord.abnormal_review_status === 'pending' && <Tag color="warning">定位异常待审</Tag>}
+                {todayRecord.is_abnormal && todayRecord.abnormal_review_status === 'approved' && <Tag color="success">定位异常已通过</Tag>}
+                {todayRecord.is_abnormal && todayRecord.abnormal_review_status === 'rejected' && <Tag color="error">定位异常已驳回</Tag>}
               </Descriptions.Item>
             </Descriptions>
           </Card>

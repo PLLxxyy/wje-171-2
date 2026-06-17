@@ -95,7 +95,9 @@ export default function SupervisorDashboard() {
                     {member.department || '-'}
                   </div>
                   <Tag color={st.color} style={{ margin: 0 }}>{st.text}</Tag>
-                  {member.attendance?.is_abnormal && <Tag color="red" style={{ margin: 0, marginLeft: 4 }}>定位异常</Tag>}
+                  {member.attendance?.is_abnormal && member.attendance?.abnormal_review_status === 'pending' && <Tag color="warning" style={{ margin: 0, marginLeft: 4 }}>定位异常待审</Tag>}
+                  {member.attendance?.is_abnormal && member.attendance?.abnormal_review_status === 'approved' && <Tag color="success" style={{ margin: 0, marginLeft: 4 }}>异常已通过</Tag>}
+                  {member.attendance?.is_abnormal && member.attendance?.abnormal_review_status === 'rejected' && <Tag color="error" style={{ margin: 0, marginLeft: 4 }}>异常已驳回</Tag>}
                 </div>
                 {member.attendance && (
                   <div style={{ marginTop: 12, fontSize: 12, color: '#666', lineHeight: 1.8 }}>
